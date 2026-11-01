@@ -6,6 +6,7 @@ function Upload() {
     const [image, setImage] = useState(null);
     const [preview, setPreview] = useState('');
     const [degradationType, setDegradationType] = useState('');
+    const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
     const team = [
@@ -43,68 +44,78 @@ function Upload() {
         const file = e.target.files[0];
 
         if (file) {
+            if (!file.type.startsWith('image/')) {
+                alert('Please select a valid image file');
+                e.target.value = '';
+                return;
+            }
+
+            if (file.size > 10 * 1024 * 1024) {
+                alert('Image size must not exceed 10 MB');
+                e.target.value = '';
+                return;
+            }
+
+            if (preview) {
+                URL.revokeObjectURL(preview);
+            }
+
             setImage(file);
             setPreview(URL.createObjectURL(file));
         }
     }
 
-   
-async function handleSubmit(e) {
-    e.preventDefault();
+    async function handleSubmit(e) {
+        e.preventDefault();
 
-    if (!image || !degradationType) {
-        alert('Please select an image and degradation category');
-        return;
-    }
-
-    if (image.size > 10 * 1024 * 1024) {
-        alert('Image size must not exceed 10 MB');
-        return;
-    }
-
-    const formData = new FormData();
-
-    formData.append('image', image);
-    formData.append('category', degradationType.toLowerCase());
-
-    try {
-
-        const response = await fetch(
-            'http://localhost:5000/api/restore',
-            {
-                method: 'POST',
-                body: formData
-            }
-        );
-
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || 'Image restoration failed');
+        if (!image || !degradationType) {
+            alert('Please select an image and degradation category');
+            return;
         }
 
-        const outputUrl = new URL(
-            data.output.url,
-            'http://localhost:5000'
-        ).href;
+        setLoading(true);
 
-        navigate('/result', {
-            state: {
-                inputUrl: preview,
-                outputUrl: outputUrl,
-                degradationType: data.category,
-                requestId: data.requestId
+        const formData = new FormData();
+
+        formData.append('image', image);
+        formData.append('category', degradationType.toLowerCase());
+
+        try {
+            const response = await fetch(
+                'http://localhost:5000/api/restore',
+                {
+                    method: 'POST',
+                    body: formData
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Image restoration failed');
             }
-        });
 
-    } catch (error) {
+            const outputUrl = new URL(
+                data.output.url,
+                'http://localhost:5000'
+            ).href;
 
-        console.error(error);
-        alert(error.message);
+            navigate('/result', {
+                state: {
+                    inputUrl: preview,
+                    outputUrl: outputUrl,
+                    degradationType: data.category,
+                    requestId: data.requestId
+                }
+            });
 
+        } catch (error) {
+            console.error(error);
+            alert(error.message);
+        } finally {
+            setLoading(false);
+        }
     }
-}
-
 
     return (
         <div className="upload-page">
@@ -169,6 +180,7 @@ async function handleSubmit(e) {
                             type="file"
                             accept="image/*"
                             onChange={handleImageChange}
+                            disabled={loading}
                         />
 
                         <span className="file-picker-text">
@@ -204,6 +216,7 @@ async function handleSubmit(e) {
                                 <button
                                     type="button"
                                     key={category.name}
+                                    disabled={loading}
                                     className={`category-card ${
                                         degradationType === category.name
                                             ? 'selected'
@@ -245,11 +258,37 @@ async function handleSubmit(e) {
                     <button
                         className="submit-button"
                         type="submit"
-                        disabled={!image || !degradationType}
+                        disabled={!image || !degradationType || loading}
                     >
-                        Enhance Image
-                        <span aria-hidden="true">→</span>
+                        {loading ? (
+                            <>
+                                Processing Image...
+                                <span className="button-loader"></span>
+                            </>
+                        ) : (
+                            <>
+                                Enhance Image
+                                <span aria-hidden="true">→</span>
+                            </>
+                        )}
                     </button>
+
+                    {loading && (
+                        <div className="processing-section">
+                            <div className="loader"></div>
+
+                            <h3>Enhancing Your Image</h3>
+
+                            <p>
+                                Our AI model is processing your image.
+                                Please wait while we bring out the details.
+                            </p>
+
+                            <span className="processing-note">
+                                PLEASE DO NOT REFRESH OR CLOSE THIS PAGE
+                            </span>
+                        </div>
+                    )}
 
                     <p className="file-note">
                         IMAGE FILES ONLY · JPG, PNG, WEBP
